@@ -1,0 +1,90 @@
+[project]
+name = "ml-cloud-optimizer"
+version = "0.1.0"
+description = "End-to-end ML system for cloud workload optimization with MLOps, Kubernetes deployment, and monitoring"
+authors = [
+    {name = "leweex95",email = "leweex95@users.noreply.github.com"}
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # Data & ML
+    "pandas>=2.1.0",
+    "numpy>=1.24.0",
+    "scikit-learn>=1.3.0",
+    "xgboost>=2.0.0",
+    "lightgbm>=4.0.0",
+    "catboost>=1.2.0",
+    "torch>=2.0.0",
+    "tensorflow>=2.13.0",
+    "statsmodels>=0.14.0",
+    "imbalanced-learn>=0.11.0",
+    
+    # Feature Store & Pipeline
+    "feast>=0.36.0",
+    "apache-airflow>=2.7.0",
+    "pydantic>=2.0.0",
+    
+    # MLflow & Experiment Tracking
+    "mlflow>=2.10.0",
+    "optuna>=3.14.0",
+    
+    # Data Generation & Utilities
+    "faker>=19.0.0",
+    "python-dateutil>=2.8.0",
+    
+    # Database & OLAP
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.0",
+    "clickhouse-driver>=0.4.0",
+    "google-cloud-bigquery>=3.13.0",
+    
+    # Kubernetes & Containerization
+    "kubernetes>=28.0.0",
+    "docker>=6.1.0",
+    
+    # Dashboards & Visualization
+    "plotly>=5.17.0",
+    "dash>=2.14.0",
+    "streamlit>=1.28.0",
+    "altair>=5.0.0",
+    
+    # Logging & Monitoring
+    "python-json-logger>=2.0.0",
+    "prometheus-client>=0.17.0",
+    
+    # Utilities
+    "python-dotenv>=1.0.0",
+    "tqdm>=4.66.0",
+    "pyyaml>=6.0.0",
+]
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.4"
+pytest-cov = "^4.1"
+black = "^23.10"
+flake8 = "^6.1"
+mypy = "^1.5"
+jupyter = "^1.0"
+notebook = "^7.0"
+ipykernel = "^6.25"
+
+[tool.poetry]
+packages = [{include = "ml_cloud_optimizer", from = "src"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311']
+
+[tool.mypy]
+python_version = "3.10"
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+addopts = "--cov=src/ml_cloud_optimizer --cov-report=html --cov-report=term"
