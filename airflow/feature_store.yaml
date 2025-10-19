@@ -1,0 +1,9 @@
+project: cloud_optimizer
+registry: file:./feature_registry.db
+provider: local
+online_store:
+  type: sqlite
+  path: ./feature_store_online.db
+offline_store:
+  type: file
+entity_key_serialization_version: 2

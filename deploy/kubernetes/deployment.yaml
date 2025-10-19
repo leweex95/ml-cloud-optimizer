@@ -1,0 +1,236 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ml-cloud-optimizer
+  labels:
+    name: ml-cloud-optimizer
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ml-optimizer-config
+  namespace: ml-cloud-optimizer
+data:
+  DB_HOST: "postgres"
+  DB_PORT: "5432"
+  DB_NAME: "ml_cloud"
+  K8S_NAMESPACE: "ml-cloud-optimizer"
+  DEBUG: "false"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ml-optimizer-secrets
+  namespace: ml-cloud-optimizer
+type: Opaque
+stringData:
+  DB_USER: "postgres"
+  DB_PASSWORD: "changeme"
+  MLFLOW_TRACKING_URI: "http://mlflow:5000"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-optimizer-pipeline
+  namespace: ml-cloud-optimizer
+  labels:
+    app: ml-optimizer
+    component: pipeline
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: ml-optimizer
+      component: pipeline
+  template:
+    metadata:
+      labels:
+        app: ml-optimizer
+        component: pipeline
+    spec:
+      serviceAccountName: ml-optimizer
+      containers:
+      - name: pipeline
+        image: ml-cloud-optimizer:latest
+        imagePullPolicy: IfNotPresent
+        
+        ports:
+        - name: metrics
+          containerPort: 8000
+          protocol: TCP
+        
+        envFrom:
+        - configMapRef:
+            name: ml-optimizer-config
+        - secretRef:
+            name: ml-optimizer-secrets
+        
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        
+        volumeMounts:
+        - name: models
+          mountPath: /app/models
+        - name: data
+          mountPath: /app/data
+      
+      volumes:
+      - name: models
+        emptyDir: {}
+      - name: data
+        emptyDir: {}
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - ml-optimizer
+              topologyKey: kubernetes.io/hostname
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-optimizer
+  namespace: ml-cloud-optimizer
+  labels:
+    app: ml-optimizer
+spec:
+  type: ClusterIP
+  selector:
+    app: ml-optimizer
+    component: pipeline
+  ports:
+  - name: metrics
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ml-optimizer-hpa
+  namespace: ml-cloud-optimizer
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ml-optimizer-pipeline
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ml-optimizer
+  namespace: ml-cloud-optimizer
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ml-optimizer
+  namespace: ml-cloud-optimizer
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ml-optimizer
+  namespace: ml-cloud-optimizer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ml-optimizer
+subjects:
+- kind: ServiceAccount
+  name: ml-optimizer
+  namespace: ml-cloud-optimizer
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ml-optimizer-pdb
+  namespace: ml-cloud-optimizer
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: ml-optimizer
+      component: pipeline
